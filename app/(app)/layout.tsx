@@ -2,14 +2,20 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
+  // Gracefully handle case where there's no session
+  let session;
+  try {
+    session = await auth();
+  } catch (error) {
+    // If auth fails (no session), redirect to login
+    redirect("/login");
+  }
 
   if (!session) {
     redirect("/login");
@@ -19,7 +25,7 @@ export default async function AppLayout({
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">{children}</div>
+        <div className="flex flex-1 flex-col gap-4 p-4">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );

@@ -106,7 +106,6 @@ export function SourcesTable({ sources, projectSlug }: SourcesTableProps) {
         <TableHeader>
           <TableRow>
             <TableHead>Title</TableHead>
-            <TableHead>Site URL</TableHead>
             <TableHead>Feed URL</TableHead>
             <TableHead>Type</TableHead>
             <TableHead>Status</TableHead>
@@ -127,16 +126,6 @@ export function SourcesTable({ sources, projectSlug }: SourcesTableProps) {
                     </span>
                   )}
                 </div>
-              </TableCell>
-              <TableCell>
-                <a
-                  href={source.siteUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline text-sm"
-                >
-                  {source.siteUrl}
-                </a>
               </TableCell>
               <TableCell>
                 <a

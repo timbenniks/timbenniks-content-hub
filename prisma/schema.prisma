@@ -19,29 +19,37 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  sources Source[]
-  items   Item[]
+  // Content Studio automation settings
+  dailyNewsletterEnabled   Boolean @default(false)
+  dailyNewsletterItemLimit Int?    @default(10)
+
+  sources      Source[]
+  items        Item[]
+  webhooks     Webhook[]
+  voiceProfile VoiceProfile?
+  drafts       ContentDraft[]
+  workflowRuns WorkflowRun[]
 
   @@index([slug])
 }
 
 model Source {
-  id                    String      @id @default(cuid())
-  projectId             String
-  title                 String?
-  siteUrl               String
-  feedUrl               String
-  description           String?
+  id                     String       @id @default(cuid())
+  projectId              String
+  title                  String?
+  siteUrl                String
+  feedUrl                String
+  description            String?
   lastFetchedAt          DateTime?
-  status                SourceStatus @default(ACTIVE)
+  status                 SourceStatus @default(ACTIVE)
   lastError              String?
-  feedType               FeedType    @default(NATIVE)
+  feedType               FeedType     @default(NATIVE)
   customRSSConfig        Json?
-  cloudflareProtected    Boolean     @default(false)
-  cloudflareWarningShown Boolean     @default(false)
+  cloudflareProtected    Boolean      @default(false)
+  cloudflareWarningShown Boolean      @default(false)
   detectionMetadata      Json?
-  createdAt              DateTime    @default(now())
-  updatedAt              DateTime    @updatedAt
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   items   Item[]
@@ -62,21 +70,22 @@ enum FeedType {
 }
 
 model Item {
-  id           String    @id @default(cuid())
-  projectId    String
-  sourceId     String
-  guid         String?
-  url          String
-  title        String
-  author       String?
-  publishedAt  DateTime?
+  id             String    @id @default(cuid())
+  projectId      String
+  sourceId       String
+  guid           String?
+  url            String
+  title          String
+  author         String?
+  publishedAt    DateTime?
   contentSnippet String?
-  contentHtml  String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  contentHtml    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  source  Source  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  source     Source      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  draftItems DraftItem[]
 
   @@unique([projectId, url])
   @@index([projectId])
@@ -87,16 +96,16 @@ model Item {
 model Account {
   id                String  @id @default(cuid())
   userId            String
-  type             String
-  provider         String
+  type              String
+  provider          String
   providerAccountId String
-  refresh_token    String? @db.Text
-  access_token     String? @db.Text
-  expires_at       Int?
-  token_type       String?
-  scope            String?
-  id_token         String? @db.Text
-  session_state    String?
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -115,13 +124,15 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String         @id @default(cuid())
   name          String?
-  email         String?   @unique
+  email         String?        @unique
   emailVerified DateTime?
   image         String?
   accounts      Account[]
   sessions      Session[]
+  drafts        ContentDraft[]
+  workflowRuns  WorkflowRun[]
 }
 
 model VerificationToken {
@@ -130,4 +141,186 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model Webhook {
+  id          String   @id @default(cuid())
+  projectId   String
+  url         String   @db.Text
+  secret      String?  @db.Text
+  events      String[] // Array of event types: "new_items", "source_refresh", etc.
+  active      Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([projectId])
+  @@index([active])
+}
+
+model WebhookDelivery {
+  id          String                @id @default(cuid())
+  webhookId   String
+  event       String
+  status      WebhookDeliveryStatus @default(PENDING)
+  statusCode  Int?
+  response    String?               @db.Text
+  payload     Json
+  error       String?               @db.Text
+  attemptedAt DateTime              @default(now())
+  deliveredAt DateTime?
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId])
+  @@index([status])
+  @@index([attemptedAt])
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+// Content Studio Models
+
+model VoiceProfile {
+  id            String   @id @default(cuid())
+  projectId     String   @unique
+  displayName   String
+  styleGuide    String   @db.Text
+  doList        Json // Array of strings
+  dontList      Json // Array of strings
+  bannedPhrases Json // Array of strings
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  voiceSamples VoiceSample[]
+
+  @@index([projectId])
+}
+
+model VoiceSample {
+  id             String   @id @default(cuid())
+  voiceProfileId String
+  title          String
+  content        String   @db.Text
+  sourceUrl      String?
+  createdAt      DateTime @default(now())
+
+  voiceProfile VoiceProfile @relation(fields: [voiceProfileId], references: [id], onDelete: Cascade)
+
+  @@index([voiceProfileId])
+}
+
+enum ContentDraftType {
+  NEWSLETTER
+  BLOGPOST
+}
+
+enum ContentDraftStatus {
+  DRAFT
+  NEEDS_REVIEW
+  APPROVED
+  FAILED
+}
+
+model ContentDraft {
+  id              String             @id @default(cuid())
+  projectId       String
+  createdByUserId String
+  type            ContentDraftType
+  status          ContentDraftStatus @default(DRAFT)
+  title           String
+  summary         String?
+  contentMarkdown String             @db.Text
+  contentJson     Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  approvedAt      DateTime?
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy    User          @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  draftItems   DraftItem[]
+  workflowRuns WorkflowRun[]
+
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model DraftItem {
+  id      String  @id @default(cuid())
+  draftId String
+  itemId  String
+  note    String?
+
+  draft ContentDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  item  Item         @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, itemId])
+  @@index([draftId])
+  @@index([itemId])
+}
+
+enum WorkflowRunStatus {
+  RUNNING
+  SUSPENDED
+  SUCCEEDED
+  FAILED
+}
+
+model WorkflowRun {
+  id              String            @id @default(cuid())
+  projectId       String
+  draftId         String?
+  createdByUserId String
+  workflowName    String
+  status          WorkflowRunStatus @default(RUNNING)
+  input           Json
+  output          Json?
+  error           String?           @db.Text
+  snapshotRef     String?
+  startedAt       DateTime          @default(now())
+  endedAt         DateTime?
+
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  draft     ContentDraft?   @relation(fields: [draftId], references: [id], onDelete: SetNull)
+  createdBy User            @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  events    WorkflowEvent[]
+
+  @@index([projectId])
+  @@index([draftId])
+  @@index([createdByUserId])
+  @@index([status])
+  @@index([workflowName])
+  @@index([startedAt])
+}
+
+enum WorkflowEventType {
+  LOG
+  STEP_START
+  STEP_END
+  ERROR
+}
+
+model WorkflowEvent {
+  id            String            @id @default(cuid())
+  workflowRunId String
+  type          WorkflowEventType
+  payload       Json
+  createdAt     DateTime          @default(now())
+
+  workflowRun WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+
+  @@index([workflowRunId])
+  @@index([type])
+  @@index([createdAt])
 }

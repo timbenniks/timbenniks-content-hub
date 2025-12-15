@@ -60,7 +60,7 @@ export default async function SourceFeedPage({
             {source.title || "Untitled Source"}
           </h1>
           <p className="text-muted-foreground">
-            Feed from {source.siteUrl}
+            Feed URL: <a href={source.feedUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-mono">{source.feedUrl}</a>
           </p>
         </div>
         <RefreshSourceButton sourceId={source.id} />

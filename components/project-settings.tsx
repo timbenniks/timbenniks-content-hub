@@ -25,6 +25,7 @@ import { Copy, RefreshCw, Check } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { WebhookManagement } from "@/components/webhook-management";
 
 interface Project {
   id: string;
@@ -170,6 +171,8 @@ export function ProjectSettings({ project }: ProjectSettingsProps) {
           </AlertDialog>
         </CardContent>
       </Card>
+
+      <WebhookManagement projectId={project.id} />
     </div>
   );
 }

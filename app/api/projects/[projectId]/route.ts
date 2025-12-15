@@ -6,6 +6,8 @@ import { z } from "zod";
 const updateProjectSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional().nullable(),
+  dailyNewsletterEnabled: z.boolean().optional(),
+  dailyNewsletterItemLimit: z.number().int().min(1).max(50).optional(),
 });
 
 export async function GET(
@@ -64,6 +66,12 @@ export async function PATCH(
       data: {
         ...(data.name && { name: data.name }),
         ...(data.description !== undefined && { description: data.description }),
+        ...(data.dailyNewsletterEnabled !== undefined && {
+          dailyNewsletterEnabled: data.dailyNewsletterEnabled,
+        }),
+        ...(data.dailyNewsletterItemLimit !== undefined && {
+          dailyNewsletterItemLimit: data.dailyNewsletterItemLimit,
+        }),
       },
     });
 

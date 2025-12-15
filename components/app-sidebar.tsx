@@ -6,6 +6,7 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -30,6 +31,7 @@ import {
   FolderKanban,
   LogOut,
   User,
+  PenTool,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +64,11 @@ export function AppSidebar() {
           icon: LayoutDashboard,
         },
         {
+          title: "Studio",
+          url: `/p/${projectSlug}/studio`,
+          icon: PenTool,
+        },
+        {
           title: "Settings",
           url: `/p/${projectSlug}/settings`,
           icon: Settings,
@@ -71,6 +78,17 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
+      <SidebarHeader>
+        <Link
+          href="/projects"
+          className="flex items-center gap-2 px-2 py-1.5 hover:opacity-80 transition-opacity"
+        >
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Rss className="h-4 w-4" />
+          </div>
+          <span className="text-sm font-semibold">News Aggregator</span>
+        </Link>
+      </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Main</SidebarGroupLabel>

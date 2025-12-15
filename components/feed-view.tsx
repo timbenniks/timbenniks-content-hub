@@ -5,6 +5,9 @@ import { FeedList } from "@/components/feed-list";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { useState, useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface Item {
   id: string;
@@ -28,12 +31,37 @@ interface Source {
 interface FeedViewProps {
   items: Item[];
   sources: Source[];
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  projectSlug: string;
 }
 
-export function FeedView({ items, sources }: FeedViewProps) {
+export function FeedView({
+  items,
+  sources,
+  currentPage,
+  totalPages,
+  totalItems,
+  projectSlug,
+}: FeedViewProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(
+    null
+  );
   const [filterToday, setFilterToday] = useState(false);
+
+  const handlePageChange = (newPage: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (newPage === 1) {
+      params.delete("page");
+    } else {
+      params.set("page", newPage.toString());
+    }
+    router.push(`/p/${projectSlug}/feed?${params.toString()}`);
+  };
 
   // Helper function to check if a date is today
   const isToday = (date: Date | null): boolean => {
@@ -105,17 +133,19 @@ export function FeedView({ items, sources }: FeedViewProps) {
         className="w-full"
       >
         <TabsList>
-          <TabsTrigger value="all">All ({items.length})</TabsTrigger>
+          <TabsTrigger value="all">All ({totalItems})</TabsTrigger>
           {todayCount > 0 && (
             <TabsTrigger value="today">Today ({todayCount})</TabsTrigger>
           )}
           {sources.map((source) => {
+            // Count is approximate based on current page items
+            // For accurate counts, we'd need to fetch per-source counts from the server
             const count = items.filter(
               (item) => item.source.id === source.id
             ).length;
             return (
               <TabsTrigger key={source.id} value={source.id}>
-                {source.title || "Untitled"} ({count})
+                {source.title || "Untitled"} ({count > 0 ? `${count}+` : "0"})
               </TabsTrigger>
             );
           })}
@@ -134,6 +164,62 @@ export function FeedView({ items, sources }: FeedViewProps) {
           </TabsContent>
         ))}
       </Tabs>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t pt-4">
+          <div className="text-sm text-muted-foreground">
+            Showing {(currentPage - 1) * 20 + 1} to{" "}
+            {Math.min(currentPage * 20, totalItems)} of {totalItems} items
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePageChange(pageNum)}
+                    className="min-w-[2.5rem]"
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
