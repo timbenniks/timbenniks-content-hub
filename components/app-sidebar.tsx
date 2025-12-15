@@ -34,6 +34,7 @@ import {
   PenTool,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const menuItems = [
   {
@@ -175,6 +176,12 @@ export function AppSidebar() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <div className="flex items-center justify-between w-full px-2 py-1.5">
+                  <span className="text-sm text-muted-foreground">Theme</span>
+                  <ThemeToggle />
+                </div>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
