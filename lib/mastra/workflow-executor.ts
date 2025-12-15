@@ -8,11 +8,18 @@ import { loadItemsStep } from "./steps/load-items";
 import { loadVoiceProfileStep } from "./steps/load-voice-profile";
 import { curateItemsStep } from "./steps/curate-items";
 import { generateContentStep } from "./steps/generate-content";
+import { logWorkflowEvent, updateWorkflowRun } from "./workflow-runner";
 import {
-  updateWorkflowRun,
-  logWorkflowEvent,
-} from "./workflow-runner";
-import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from "@mastra/core/workflows/_constants";
+  createStepContext,
+  executeStepWithLogging,
+  withWorkflowErrorHandling,
+  createSuspendHandler,
+} from "./workflow-helpers";
+import {
+  loadItemsByIds,
+  generateMarkdownFromSummaries,
+  mergeSummaries,
+} from "./item-utils";
 
 export async function executeNewsletterDraftWorkflow(
   workflowRunId: string,
@@ -23,7 +30,7 @@ export async function executeNewsletterDraftWorkflow(
     regenerateItemId?: string; // Optional: regenerate only this item
   }
 ) {
-  try {
+  return withWorkflowErrorHandling(workflowRunId, async () => {
     await logWorkflowEvent(workflowRunId, "LOG", {
       message: `Starting workflow execution for draft ${input.draftId}`,
       input: {
@@ -32,82 +39,30 @@ export async function executeNewsletterDraftWorkflow(
         itemCount: input.itemIds.length,
       },
     });
+
+    const stepContext = createStepContext(workflowRunId, "newsletter-draft", input);
+
     // Step 1: Load voice profile
-    await logWorkflowEvent(workflowRunId, "STEP_START", {
-      step: "load-voice-profile",
-    });
-
-    const voiceProfileResult = await loadVoiceProfileStep.execute({
-      inputData: { projectId: input.projectId },
-      state: {},
-      setState: () => {},
-      runId: workflowRunId,
-      workflowId: "newsletter-draft",
-      mastra: {} as any,
-      runtimeContext: {} as any,
-      getInitData: () => input,
-      getStepResult: () => ({} as any),
-      suspend: async () => {},
-      bail: () => {},
-      abort: () => {},
-      runCount: 1,
-      tracingContext: {} as any,
-      [EMITTER_SYMBOL]: {
-        emit: async () => {},
-        on: () => {},
-        off: () => {},
-        once: () => {},
-      } as any,
-      [STREAM_FORMAT_SYMBOL]: undefined,
-      engine: "default",
-      abortSignal: new AbortController().signal,
-      writer: {} as any,
-    });
-
-    await logWorkflowEvent(workflowRunId, "STEP_END", {
-      step: "load-voice-profile",
-      result: voiceProfileResult,
-    });
+    const voiceProfileResult = await executeStepWithLogging(
+      loadVoiceProfileStep,
+      workflowRunId,
+      "load-voice-profile",
+      { projectId: input.projectId },
+      stepContext
+    );
 
     // Step 2: Load items
+    // If regenerating a single item, load only that item
+    // Otherwise, load all requested items
+    const itemsToLoad = input.regenerateItemId
+      ? [input.regenerateItemId]
+      : input.itemIds;
+
     await logWorkflowEvent(workflowRunId, "STEP_START", {
       step: "load-items",
     });
 
-    const itemsResult = await loadItemsStep.execute({
-      inputData: {
-        projectId: input.projectId,
-        limit: input.itemIds.length || 50,
-      },
-      state: {},
-      setState: () => {},
-      runId: workflowRunId,
-      workflowId: "newsletter-draft",
-      mastra: {} as any,
-      runtimeContext: {} as any,
-      getInitData: () => input,
-      getStepResult: () => ({} as any),
-      suspend: async () => {},
-      bail: () => {},
-      abort: () => {},
-      runCount: 1,
-      tracingContext: {} as any,
-      [EMITTER_SYMBOL]: {
-        emit: async () => {},
-        on: () => {},
-        off: () => {},
-        once: () => {},
-      } as any,
-      [STREAM_FORMAT_SYMBOL]: undefined,
-      engine: "default",
-      abortSignal: new AbortController().signal,
-      writer: {} as any,
-    });
-
-    // Filter items to only those requested (if not single item regeneration)
-    const filteredItems = input.regenerateItemId
-      ? itemsResult.items
-      : itemsResult.items.filter((item) => input.itemIds.includes(item.id));
+    const filteredItems = await loadItemsByIds(itemsToLoad, input.projectId);
 
     await logWorkflowEvent(workflowRunId, "STEP_END", {
       step: "load-items",
@@ -115,62 +70,30 @@ export async function executeNewsletterDraftWorkflow(
     });
 
     // Step 3: Generate content
-    await logWorkflowEvent(workflowRunId, "STEP_START", {
-      step: "generate-content",
-    });
-
     let suspendPayload: any = null;
     let suspended = false;
 
-    const generateResult = await generateContentStep.execute({
-      inputData: {
+    const generateContext = createStepContext(workflowRunId, "newsletter-draft", input, {
+      suspend: createSuspendHandler(workflowRunId, (payload) => {
+        suspendPayload = payload;
+        suspended = true;
+      }),
+    });
+
+    const generateResult = await executeStepWithLogging(
+      generateContentStep,
+      workflowRunId,
+      "generate-content",
+      {
         items: filteredItems,
         voiceProfile: voiceProfileResult.voiceProfile,
       },
-      state: {},
-      setState: () => {},
-      runId: workflowRunId,
-      workflowId: "newsletter-draft",
-      mastra: {} as any,
-      runtimeContext: {} as any,
-      getInitData: () => input,
-      getStepResult: () => ({} as any),
-      suspend: async (payload: any) => {
-        suspendPayload = payload;
-        suspended = true;
-        await updateWorkflowRun(workflowRunId, {
-          status: "SUSPENDED",
-          snapshotRef: JSON.stringify(payload),
-        });
-        await logWorkflowEvent(workflowRunId, "LOG", {
-          message: "Workflow suspended for human review",
-          payload,
-        });
-      },
-      bail: () => {},
-      abort: () => {},
-      runCount: 1,
-      tracingContext: {} as any,
-      [EMITTER_SYMBOL]: {
-        emit: async () => {},
-        on: () => {},
-        off: () => {},
-        once: () => {},
-      } as any,
-      [STREAM_FORMAT_SYMBOL]: undefined,
-      engine: "default",
-      abortSignal: new AbortController().signal,
-      writer: {} as any,
-    });
+      generateContext
+    );
 
     if (suspended) {
       return { suspended: true, payload: suspendPayload };
     }
-
-    await logWorkflowEvent(workflowRunId, "STEP_END", {
-      step: "generate-content",
-      result: generateResult,
-    });
 
     // Step 4: Save draft
     await logWorkflowEvent(workflowRunId, "STEP_START", {
@@ -183,49 +106,20 @@ export async function executeNewsletterDraftWorkflow(
       select: { title: true, contentJson: true },
     });
 
-    let finalSummaries: Array<{ itemId: string; summary: string }> =
-      generateResult.itemSummaries;
+    let finalSummaries: Array<{ itemId: string; summary: string }> = generateResult.itemSummaries;
     let finalMarkdown = generateResult.content;
 
     // If regenerating a single item, merge with existing summaries
     if (input.regenerateItemId && draft?.contentJson) {
       const existingSummaries: Array<{ itemId: string; summary: string }> =
         (draft.contentJson as any)?.itemSummaries || [];
-      const existingMap = new Map(
-        existingSummaries.map((s) => [s.itemId, s])
-      );
 
-      // Update or add the regenerated summaries
-      generateResult.itemSummaries.forEach((summary) => {
-        existingMap.set(summary.itemId, summary);
-      });
+      finalSummaries = mergeSummaries(existingSummaries, generateResult.itemSummaries);
 
-      finalSummaries = Array.from(existingMap.values());
-
-      // Rebuild markdown with all items (load directly from DB)
-      const allItemIds = Array.from(existingMap.keys());
-      const allItems = await db.item.findMany({
-        where: {
-          id: { in: allItemIds },
-          projectId: input.projectId,
-        },
-        include: {
-          source: {
-            select: {
-              id: true,
-              title: true,
-              siteUrl: true,
-            },
-          },
-        },
-      });
-
-      finalMarkdown = finalSummaries
-        .map((summary) => {
-          const item = allItems.find((i) => i.id === summary.itemId);
-          return `## ${item?.title || "Item"}\n\n${summary.summary}\n\n[Read more](${item?.url || "#"})`;
-        })
-        .join("\n\n---\n\n");
+      // Rebuild markdown with all items
+      const allItemIds = finalSummaries.map((s: { itemId: string }) => s.itemId);
+      const allItems = await loadItemsByIds(allItemIds, input.projectId);
+      finalMarkdown = generateMarkdownFromSummaries(finalSummaries, allItems);
     }
 
     await db.contentDraft.update({
@@ -238,6 +132,7 @@ export async function executeNewsletterDraftWorkflow(
     });
 
     // Ensure items are linked
+    // Use itemsToLoad (which respects regenerateItemId) instead of input.itemIds
     const existingItems = await db.draftItem.findMany({
       where: { draftId: input.draftId },
       select: { itemId: true },
@@ -245,7 +140,7 @@ export async function executeNewsletterDraftWorkflow(
 
     const existingItemIds = new Set(existingItems.map((ei) => ei.itemId));
 
-    const itemsToAdd = input.itemIds.filter((id) => !existingItemIds.has(id));
+    const itemsToAdd = itemsToLoad.filter((id) => !existingItemIds.has(id));
     if (itemsToAdd.length > 0) {
       await db.draftItem.createMany({
         data: itemsToAdd.map((itemId) => ({
@@ -273,18 +168,7 @@ export async function executeNewsletterDraftWorkflow(
     });
 
     return result;
-  } catch (error) {
-    await updateWorkflowRun(workflowRunId, {
-      status: "FAILED",
-      error: error instanceof Error ? error.message : String(error),
-    });
-
-    await logWorkflowEvent(workflowRunId, "ERROR", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-
-    throw error;
-  }
+  });
 }
 
 export async function executeCurateItemsWorkflow(
@@ -295,87 +179,37 @@ export async function executeCurateItemsWorkflow(
     limit?: number;
   }
 ) {
-  try {
-    // Step 1: Load items
-    await logWorkflowEvent(workflowRunId, "STEP_START", {
-      step: "load-items",
-    });
+  return withWorkflowErrorHandling(workflowRunId, async () => {
+    const stepContext = createStepContext(workflowRunId, "curate-items", input);
 
-    const itemsResult = await loadItemsStep.execute({
-      inputData: {
+    // Step 1: Load items
+    const itemsResult = await executeStepWithLogging(
+      loadItemsStep,
+      workflowRunId,
+      "load-items",
+      {
         projectId: input.projectId,
         since: input.since,
         limit: input.limit || 50,
       },
-      state: {},
-      setState: () => {},
-      runId: workflowRunId,
-      workflowId: "curate-items",
-      mastra: {} as any,
-      runtimeContext: {} as any,
-      getInitData: () => input,
-      getStepResult: () => ({} as any),
-      suspend: async () => {},
-      bail: () => {},
-      abort: () => {},
-      runCount: 1,
-      tracingContext: {} as any,
-      [EMITTER_SYMBOL]: {
-        emit: async () => {},
-        on: () => {},
-        off: () => {},
-        once: () => {},
-      } as any,
-      [STREAM_FORMAT_SYMBOL]: undefined,
-      engine: "default",
-      abortSignal: new AbortController().signal,
-      writer: {} as any,
-    });
-
-    await logWorkflowEvent(workflowRunId, "STEP_END", {
-      step: "load-items",
-      result: itemsResult,
-    });
+      stepContext
+    );
 
     // Step 2: Curate items
-    await logWorkflowEvent(workflowRunId, "STEP_START", {
-      step: "curate-items",
+    const curateContext = createStepContext(workflowRunId, "curate-items", input, {
+      getStepResult: () => itemsResult as any,
     });
 
-    const curateResult = await curateItemsStep.execute({
-      inputData: {
+    const curateResult = await executeStepWithLogging(
+      curateItemsStep,
+      workflowRunId,
+      "curate-items",
+      {
         items: itemsResult.items,
         limit: input.limit || 10,
       },
-      state: {},
-      setState: () => {},
-      runId: workflowRunId,
-      workflowId: "curate-items",
-      mastra: {} as any,
-      runtimeContext: {} as any,
-      getInitData: () => input,
-      getStepResult: () => itemsResult as any,
-      suspend: async () => {},
-      bail: () => {},
-      abort: () => {},
-      runCount: 1,
-      tracingContext: {} as any,
-      [EMITTER_SYMBOL]: {
-        emit: async () => {},
-        on: () => {},
-        off: () => {},
-        once: () => {},
-      } as any,
-      [STREAM_FORMAT_SYMBOL]: undefined,
-      engine: "default",
-      abortSignal: new AbortController().signal,
-      writer: {} as any,
-    });
-
-    await logWorkflowEvent(workflowRunId, "STEP_END", {
-      step: "curate-items",
-      result: curateResult,
-    });
+      curateContext
+    );
 
     await updateWorkflowRun(workflowRunId, {
       status: "SUCCEEDED",
@@ -383,17 +217,6 @@ export async function executeCurateItemsWorkflow(
     });
 
     return curateResult;
-  } catch (error) {
-    await updateWorkflowRun(workflowRunId, {
-      status: "FAILED",
-      error: error instanceof Error ? error.message : String(error),
-    });
-
-    await logWorkflowEvent(workflowRunId, "ERROR", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-
-    throw error;
-  }
+  });
 }
 

@@ -3,10 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
 import { createWorkflowRun } from "@/lib/mastra/workflow-runner";
-import {
-  executeNewsletterDraftWorkflow,
-  executeCurateItemsWorkflow,
-} from "@/lib/mastra/workflow-executor";
+import { executeWorkflow, WorkflowName } from "@/lib/mastra/workflow-dispatcher";
 
 const runWorkflowSchema = z.object({
   workflowName: z.enum(["curate-items", "newsletter-draft"]), // newsletter-draft kept for backward compatibility
@@ -55,17 +52,15 @@ export async function POST(request: NextRequest) {
     (async () => {
       try {
         console.log(`[Workflow] Starting ${data.workflowName} workflow run ${workflowRun.id}`);
-        if (data.workflowName === "curate-items") {
-          await executeCurateItemsWorkflow(workflowRun.id, data.input as any);
-        } else if (data.workflowName === "newsletter-draft") {
-          await executeNewsletterDraftWorkflow(workflowRun.id, data.input as any);
-        } else {
-          throw new Error(`Unknown workflow: ${data.workflowName}`);
-        }
+        await executeWorkflow(
+          data.workflowName as WorkflowName,
+          workflowRun.id,
+          data.input as any
+        );
         console.log(`[Workflow] Completed ${data.workflowName} workflow run ${workflowRun.id}`);
       } catch (error) {
         console.error(`[Workflow] ${workflowRun.id} failed:`, error);
-        // Ensure error is logged to workflow run
+        // Ensure error is logged to workflow run (workflow executor also handles this, but this is a safety net)
         await db.workflowRun.update({
           where: { id: workflowRun.id },
           data: {

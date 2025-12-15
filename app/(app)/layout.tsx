@@ -8,14 +8,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Gracefully handle case where there's no session
-  let session;
-  try {
-    session = await auth();
-  } catch (error) {
-    // If auth fails (no session), redirect to login
-    redirect("/login");
-  }
+  const session = await auth();
 
   if (!session) {
     redirect("/login");

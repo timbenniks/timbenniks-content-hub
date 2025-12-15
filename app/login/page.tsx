@@ -10,14 +10,7 @@ import { auth } from "@/lib/auth";
 import { LoginButton } from "./login-button";
 
 export default async function LoginPage() {
-  // Gracefully handle case where there's no session (user is logged out)
-  let session;
-  try {
-    session = await auth();
-  } catch (error) {
-    // If auth fails (no session), continue to show login page
-    session = null;
-  }
+  const session = await auth();
 
   if (session) {
     redirect("/projects");
