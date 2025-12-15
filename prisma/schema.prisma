@@ -26,28 +26,39 @@ model Project {
 }
 
 model Source {
-  id           String      @id @default(cuid())
-  projectId    String
-  title        String?
-  siteUrl      String
-  feedUrl      String
-  description  String?
-  lastFetchedAt DateTime?
-  status       SourceStatus @default(ACTIVE)
-  lastError    String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id                    String      @id @default(cuid())
+  projectId             String
+  title                 String?
+  siteUrl               String
+  feedUrl               String
+  description           String?
+  lastFetchedAt          DateTime?
+  status                SourceStatus @default(ACTIVE)
+  lastError              String?
+  feedType               FeedType    @default(NATIVE)
+  customRSSConfig        Json?
+  cloudflareProtected    Boolean     @default(false)
+  cloudflareWarningShown Boolean     @default(false)
+  detectionMetadata      Json?
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   items   Item[]
 
   @@index([projectId])
   @@index([status])
+  @@index([feedType])
 }
 
 enum SourceStatus {
   ACTIVE
   ERROR
+}
+
+enum FeedType {
+  NATIVE
+  CUSTOM
 }
 
 model Item {

@@ -38,10 +38,21 @@ export async function GET(
       10
     );
     const since = request.nextUrl.searchParams.get("since");
+    const today = request.nextUrl.searchParams.get("today") === "true";
 
     // Build query
     const where: any = { projectId: project.id };
-    if (since) {
+    
+    if (today) {
+      // Filter for items published today
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      where.publishedAt = {
+        gte: startOfToday,
+        lte: endOfToday,
+      };
+    } else if (since) {
       const sinceDate = new Date(since);
       if (!isNaN(sinceDate.getTime())) {
         where.publishedAt = { gte: sinceDate };

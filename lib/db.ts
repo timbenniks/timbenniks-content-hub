@@ -1,24 +1,25 @@
 import { PrismaClient } from "./generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
+import { PrismaNeon } from "@prisma/adapter-neon";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
 /**
- * Prisma Client instance for Prisma 7
+ * Prisma Client instance for Prisma 7 with Neon Postgres
  * 
  * Prisma 7 requires either an adapter or accelerateUrl.
  * 
- * - If DATABASE_URL starts with "prisma+", it's a Prisma Accelerate URL - use accelerateUrl
- * - Otherwise, use PostgreSQL adapter with connection pool
+ * For Neon Postgres:
+ * - Uses Neon's serverless adapter for optimal serverless performance
+ * - DATABASE_URL should be your Neon connection string
+ * - Works seamlessly with Vercel's serverless functions
  * 
- * For Vercel Postgres:
- * - DATABASE_URL will be set automatically by Vercel
- * - Or use POSTGRES_PRISMA_URL for pooled connections
+ * Environment variables:
+ * - DATABASE_URL: Neon connection string (required)
+ * - Or POSTGRES_URL: Fallback if DATABASE_URL not set
  */
-const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL;
+const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
 // Check if it's a Prisma Accelerate URL
 const isAccelerateUrl = databaseUrl?.startsWith("prisma+");
@@ -30,9 +31,9 @@ if (isAccelerateUrl) {
   // Use Prisma Accelerate
   accelerateUrl = databaseUrl;
 } else if (databaseUrl) {
-  // Use PostgreSQL adapter
-  const pool = new Pool({ connectionString: databaseUrl });
-  adapter = new PrismaPg(pool);
+  // Use Neon serverless adapter
+  // PrismaNeon accepts a PoolConfig, which can be a connection string
+  adapter = new PrismaNeon({ connectionString: databaseUrl });
 }
 
 export const db =

@@ -32,12 +32,28 @@ interface FeedViewProps {
 
 export function FeedView({ items, sources }: FeedViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(
-    null
-  );
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [filterToday, setFilterToday] = useState(false);
+
+  // Helper function to check if a date is today
+  const isToday = (date: Date | null): boolean => {
+    if (!date) return false;
+    const today = new Date();
+    const itemDate = new Date(date);
+    return (
+      itemDate.getDate() === today.getDate() &&
+      itemDate.getMonth() === today.getMonth() &&
+      itemDate.getFullYear() === today.getFullYear()
+    );
+  };
 
   const filteredItems = useMemo(() => {
     let filtered = items;
+
+    // Filter by "today" first
+    if (filterToday) {
+      filtered = filtered.filter((item) => isToday(item.publishedAt));
+    }
 
     // Filter by source
     if (selectedSourceId) {
@@ -56,7 +72,10 @@ export function FeedView({ items, sources }: FeedViewProps) {
     }
 
     return filtered;
-  }, [items, selectedSourceId, searchQuery]);
+  }, [items, selectedSourceId, searchQuery, filterToday]);
+
+  // Count items posted today
+  const todayCount = items.filter((item) => isToday(item.publishedAt)).length;
 
   return (
     <div className="space-y-4">
@@ -73,14 +92,23 @@ export function FeedView({ items, sources }: FeedViewProps) {
       </div>
 
       <Tabs
-        value={selectedSourceId || "all"}
-        onValueChange={(value) => setSelectedSourceId(value === "all" ? null : value)}
+        value={filterToday ? "today" : selectedSourceId || "all"}
+        onValueChange={(value) => {
+          if (value === "today") {
+            setFilterToday(true);
+            setSelectedSourceId(null);
+          } else {
+            setFilterToday(false);
+            setSelectedSourceId(value === "all" ? null : value);
+          }
+        }}
         className="w-full"
       >
         <TabsList>
-          <TabsTrigger value="all">
-            All ({items.length})
-          </TabsTrigger>
+          <TabsTrigger value="all">All ({items.length})</TabsTrigger>
+          {todayCount > 0 && (
+            <TabsTrigger value="today">Today ({todayCount})</TabsTrigger>
+          )}
           {sources.map((source) => {
             const count = items.filter(
               (item) => item.source.id === source.id
@@ -95,6 +123,11 @@ export function FeedView({ items, sources }: FeedViewProps) {
         <TabsContent value="all" className="mt-4">
           <FeedList items={filteredItems} />
         </TabsContent>
+        {todayCount > 0 && (
+          <TabsContent value="today" className="mt-4">
+            <FeedList items={filteredItems} />
+          </TabsContent>
+        )}
         {sources.map((source) => (
           <TabsContent key={source.id} value={source.id} className="mt-4">
             <FeedList items={filteredItems} />
@@ -104,4 +137,3 @@ export function FeedView({ items, sources }: FeedViewProps) {
     </div>
   );
 }
-

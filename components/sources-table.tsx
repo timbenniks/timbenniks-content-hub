@@ -10,11 +10,23 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, ExternalLink } from "lucide-react";
+import { RefreshCw, ExternalLink, Trash2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { EditSourceDialog } from "@/components/edit-source-dialog";
 
 interface Source {
   id: string;
@@ -22,6 +34,8 @@ interface Source {
   siteUrl: string;
   feedUrl: string;
   status: "ACTIVE" | "ERROR";
+  feedType?: "NATIVE" | "CUSTOM";
+  cloudflareProtected?: boolean;
   lastFetchedAt: Date | null;
   lastError: string | null;
 }
@@ -33,6 +47,7 @@ interface SourcesTableProps {
 
 export function SourcesTable({ sources, projectSlug }: SourcesTableProps) {
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const handleRefresh = async (sourceId: string) => {
     setRefreshing(sourceId);
@@ -58,6 +73,33 @@ export function SourcesTable({ sources, projectSlug }: SourcesTableProps) {
     }
   };
 
+  const handleDelete = async (sourceId: string, sourceTitle: string | null) => {
+    setDeleting(sourceId);
+    try {
+      const response = await fetch(`/api/sources/${sourceId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete source");
+      }
+
+      const data = await response.json();
+      const itemsDeleted = data.itemsDeleted || 0;
+      toast.success(
+        `Source "${sourceTitle || "Untitled"}" deleted successfully.${
+          itemsDeleted > 0 ? ` ${itemsDeleted} item${itemsDeleted !== 1 ? "s" : ""} removed.` : ""
+        }`
+      );
+      // Refresh the page to show updated data
+      window.location.reload();
+    } catch (error) {
+      toast.error("Failed to delete source");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   return (
     <div className="rounded-md border">
       <Table>
@@ -66,6 +108,7 @@ export function SourcesTable({ sources, projectSlug }: SourcesTableProps) {
             <TableHead>Title</TableHead>
             <TableHead>Site URL</TableHead>
             <TableHead>Feed URL</TableHead>
+            <TableHead>Type</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Last Fetched</TableHead>
             <TableHead>Error</TableHead>
@@ -76,7 +119,14 @@ export function SourcesTable({ sources, projectSlug }: SourcesTableProps) {
           {sources.map((source) => (
             <TableRow key={source.id}>
               <TableCell className="font-medium">
-                {source.title || "-"}
+                <div className="flex items-center gap-2">
+                  {source.title || "-"}
+                  {source.cloudflareProtected && (
+                    <span title="Cloudflare protected">
+                      <AlertTriangle className="h-4 w-4 text-orange-500" />
+                    </span>
+                  )}
+                </div>
               </TableCell>
               <TableCell>
                 <a
@@ -97,6 +147,11 @@ export function SourcesTable({ sources, projectSlug }: SourcesTableProps) {
                 >
                   {source.feedUrl}
                 </a>
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline">
+                  {source.feedType === "CUSTOM" ? "Custom RSS" : "Native RSS"}
+                </Badge>
               </TableCell>
               <TableCell>
                 <Badge
@@ -121,7 +176,8 @@ export function SourcesTable({ sources, projectSlug }: SourcesTableProps) {
                     variant="ghost"
                     size="icon"
                     onClick={() => handleRefresh(source.id)}
-                    disabled={refreshing === source.id}
+                    disabled={refreshing === source.id || deleting === source.id}
+                    title="Refresh source"
                   >
                     <RefreshCw
                       className={`h-4 w-4 ${
@@ -129,11 +185,47 @@ export function SourcesTable({ sources, projectSlug }: SourcesTableProps) {
                       }`}
                     />
                   </Button>
+                  <EditSourceDialog
+                    sourceId={source.id}
+                    currentTitle={source.title}
+                  />
                   <Button variant="ghost" size="icon" asChild>
                     <Link href={`/p/${projectSlug}/sources/${source.id}`}>
                       <ExternalLink className="h-4 w-4" />
                     </Link>
                   </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={deleting === source.id}
+                        title="Delete source"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Source</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete this source? This will
+                          permanently delete the source and all its items. This
+                          action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleDelete(source.id, source.title)}
+                          disabled={deleting === source.id}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          {deleting === source.id ? "Deleting..." : "Delete"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </TableCell>
             </TableRow>
